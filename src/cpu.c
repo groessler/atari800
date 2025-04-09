@@ -80,6 +80,15 @@
 #include "libatari800/cpu_crash.h"
 #endif
 
+#define EMULATOR_INTERFACE
+
+#ifdef EMULATOR_INTERFACE
+#define EMUIF_MAGIC_ADDR 0x1A1
+#define EMUIF_ENTER_LEN 3
+static unsigned char emuif_enter[EMUIF_ENTER_LEN] = { 'A', 'p', 'C' };
+static unsigned int emuif_state;
+#endif
+
 /* For Atari Basic loader */
 void (*CPU_rts_handler)(void) = NULL;
 
@@ -1688,6 +1697,32 @@ void CPU_GO(int limit)
 
 	OPCODE(8e)				/* STX abcd */
 		ABSOLUTE;
+#ifdef EMULATOR_INTERFACE
+        if (addr == EMUIF_MAGIC_ADDR) {
+            if (emuif_enter[emuif_state] == X) {
+                emuif_state++;
+                if (emuif_state == EMUIF_ENTER_LEN) {
+                    /* function code in Y and parameter in A */
+                    switch(Y) {
+                    case 0:
+                        /*printf("detection detected\n");*/
+                        A = 1;
+                        break;
+                    case 1:
+                        /*printf("exit with return code %d\n", A);*/
+                        Atari800_Exit(FALSE);
+                        exit(A);
+                        break;
+                    default:
+                        printf("EMUIF: unknown request %u\n", Y);
+                        break;
+                    }
+                    emuif_state = 0;  /* start fresh */
+                }
+            }
+            else emuif_state = 0;
+        }
+#endif
 		MEMORY_PutByte(addr, X);
 		DONE;
 
